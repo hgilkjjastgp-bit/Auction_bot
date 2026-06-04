@@ -172,3 +172,5 @@ client.on('messageCreate', async (message) => {
                         const reEmbed = new EmbedBuilder().setTitle('📦 لوحة شراء المزادات الرسمية').setDescription('اضغط على الزر أدناه لشراء مزاد جديد.').setColor('#2f3136');
                         const reRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('buy_auction').setLabel('🛒 شراء مزاد جديد').setStyle(ButtonStyle.Success));
                         await targetRoom.send({ embeds: [reEmbed], components: [reRow] });
+
+                         client.login(process.env.DISCORD_TOKEN);
