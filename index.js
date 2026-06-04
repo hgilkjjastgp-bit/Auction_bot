@@ -13,13 +13,18 @@ const CONFIG = {
     
     // رومات المزادات
     AUCTION_ROOMS: ["1111", "2222", "3333", "4444"], // الأربعة رومات المخصصة للمزادات
-    BOT_COMMANDS_ROOM: "ضع_ايدي_روم_الاوامر_هنا", // روم تحويل الاموال
-    AUCTION_INPUT_ROOM: "ضع_ايدي_روم_كتابة_نموذج_المزاد_هنا", // الروم الخاص بكتابة النموذج
+    BOT_COMMANDS_ROOM: "ضع_ايدي_روم_الاوامر_هنا", // روم تحويل الاموال والفحص
+    AUCTION_INPUT_ROOM: "ضع_ايدي_روم_كتابة_نموذج_المزاد_هنا", // الروم الخاص بكتابة نموذج المزاد
+    
+    // رومات المنشورات
+    PUB_LOG_ROOM: "ضع_هنا_ايدي_روم_كتابة_المنشورات", // الروم السري الذي يكتب فيه العضو منشوره
+    PUB_DISPLAY_ROOM: "ضع_هنا_ايدي_روم_عرض_المنشورات_العام" // الروم العام الذي يظهر فيه الإمبيد والأزرار مثل الصورة
 };
 
 const userSessions = new Map();
-global.userSessions = userSessions; // مشاركة الجلسات مع ملف المنشورات
+global.userSessions = userSessions; // مشاركة الجلسات مع ملف المنشورات المخصص
 
+// تعريف الأوامر المائية الرسمية (Slash Commands)
 const commands = [
     { name: 'show', description: 'إنشاء لوحة شراء المزاد الرسمية', default_member_permissions: PermissionFlagsBits.Administrator.toString() },
     { name: 'publication', description: 'إنشاء لوحة شراء المنشورات الرسمية', default_member_permissions: PermissionFlagsBits.Administrator.toString() }
@@ -30,36 +35,39 @@ client.once('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     try {
         await rest.put(Routes.applicationCommands(CONFIG.CLIENT_ID), { body: commands });
-        console.log('⚡ تم تسجيل أوامر الـ Slash بنجاح!');
+        console.log('⚡ تم تسجيل أوامر الـ Slash المائية بنجاح في ديسكورد!');
     } catch (error) { console.error(error); }
 });
 
-// ==================== [ التعامل مع الأزرار والقوائم ] ====================
+// ==================== [ التعامل مع التفاعلات والأوامر المائية ] ====================
 client.on('interactionCreate', async (interaction) => {
+    // تشغيل الأوامر المائية القادمة من القائمة الرسمية للديسكورد
     if (interaction.isChatInputCommand()) {
         if (interaction.commandName === 'show') {
             const embed = new EmbedBuilder().setTitle('📦 لوحة شراء المزادات الرسمية').setDescription('اضغط على الزر أدناه لشراء مزاد واتبع الخطوات الحماية التلقائية.').setColor('#2f3136');
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('buy_auction').setLabel('🛒 شراء مزاد جديد').setStyle(ButtonStyle.Success));
-            await interaction.reply({ content: 'تم الإرسال.', ephemeral: true });
+            await interaction.reply({ content: 'تم إرسال لوحة المزاد بنجاح.', ephemeral: true });
             await interaction.channel.send({ embeds: [embed], components: [row] });
         }
+        
         if (interaction.commandName === 'publication') {
-            const embed = new EmbedBuilder().setTitle('📢 لوحة شراء المنشورات الدائمة').setDescription('اضغط على الزر أدناه لشراء منشور مخصص ونشره عبر البوت.').setColor('#00ffcc');
-            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('buy_pub').setLabel('🛍️ شراء منشور').setStyle(ButtonStyle.Primary));
-            await interaction.reply({ content: 'تم الإرسال.', ephemeral: true });
+            const embed = new EmbedBuilder().setTitle('📢 لوحة شراء المنشورات الدائمة').setDescription('اضغط على الزر أدناه لشراء منشور مخصص ونشره عبر البوت بالشكل الرسمي.').setColor('#00ffcc');
+            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('buy_pub').setLabel('🛍️ شراء منشور جديد').setStyle(ButtonStyle.Primary));
+            await interaction.reply({ content: 'تم إرسال لوحة المنشورات المائية بنجاح.', ephemeral: true });
             await interaction.channel.send({ embeds: [embed], components: [row] });
         }
     }
 
+    // معالجة الأزرار والقوائم التفاعلية
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
         const userId = interaction.user.id;
 
-        // تحويل التفاعلات الخاصة بالمنشورات للملف الثاني للتعامل معها
+        // تحويل التفاعلات الخاصة بالمنشورات والأزرار المرافقة لها للملف الثاني مباشرة
         if (interaction.customId === 'buy_pub' || interaction.customId === 'pub_mention_menu') {
             return handlePublicationInteraction(interaction, userId, CONFIG);
         }
 
-        // مسار المزاد
+        // مسار المزاد التلقائي
         if (interaction.customId === 'buy_auction') {
             userSessions.set(userId, { type: 'auction', step: 'mention_select' });
             const row = new ActionRowBuilder().addComponents(
@@ -122,14 +130,14 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// ==================== [ فحص الرسائل والتحويل ونموذج الروم ] ====================
+// ==================== [ فحص الرسائل والتحويلات ] ====================
 client.on('messageCreate', async (message) => {
     if (message.author.bot && message.author.id !== CONFIG.PROBOT_ID) return;
 
-    // تمرير رسائل روم المنشورات للملف المخصص لها
+    // تمرير رسائل روم المنشورات للملّف الثاني ليعالجها بشكل منفصل ومحمي
     handlePublicationMessage(message, CONFIG);
 
-    // استقبال نموذج المزاد من العضو في الروم الخاص بعد الدفع
+    // استقبال نموذج المزاد من العضو في الروم المخصص بعد إتمام الدفع
     if (!message.author.bot && message.channel.id === CONFIG.AUCTION_INPUT_ROOM) {
         const session = userSessions.get(message.author.id);
         if (session && session.type === 'auction' && session.step === 'waiting_model_input') {
@@ -137,10 +145,10 @@ client.on('messageCreate', async (message) => {
             const userText = message.content;
             const userAttachment = message.attachments.first() ? message.attachments.first().url : null;
 
-            await message.delete().catch(() => {}); // حذف رسالته فوراً لحفظ الخصوصية
-            userSessions.delete(message.author.id); // إنهاء الجلسة
+            await message.delete().catch(() => {}); // حذف رسالة العضو فوراً للتنظيم والسرية
+            userSessions.delete(message.author.id); // إنهاء الجلسة للمستخدم
 
-            // إرسال المزاد في أول روم متاح من القائمة
+            // البحث عن روم مزاد متاح من القائمة لإطلاق المزاد فيه
             const targetRoom = message.guild.channels.cache.get(CONFIG.AUCTION_ROOMS[0]);
             if (targetRoom) {
                 await targetRoom.send({ content: session.mention });
@@ -151,26 +159,19 @@ client.on('messageCreate', async (message) => {
                     .setColor('#ff9900');
                 await targetRoom.send({ embeds: [modelEmbed] });
 
-                // إرسال القوانين الصارمة للمزاد
                 const rulesEmbed = new EmbedBuilder()
                     .setTitle('📜 قوانين المزاد العامة')
                     .setDescription("1. ممنوع تزيد لو ما معك فلوس كاش بيدك.\n2. ممنوع تزيد اقل من 100k.\n3. ممنوع تزيد اقل من سعر البداية.\n4. ممنوع تفتح أي موضوع جانبي غير المزاد.")
                     .setColor('#ff0000');
                 await targetRoom.send({ embeds: [rulesEmbed] });
 
-                // إذا أرفق صورة يتم إرسالها وفحصها
                 if (userAttachment) {
                     await targetRoom.send({ content: userAttachment });
                 }
 
-                // مؤقت انتهاء المزاد وتنظيف الروم بالكامل وإعادة زر الشراء
+                // مؤقت انتهاء وقت المزاد وتنظيف الروم وإعادة زر الشراء الأساسي
                 setTimeout(async () => {
                     try {
                         const collected = await targetRoom.messages.fetch({ limit: 100 });
-                        await targetRoom.bulkDelete(collected, true);
-                        
-                        const reEmbed = new EmbedBuilder().setTitle('📦 لوحة شراء المزادات الرسمية').setDescription('اضغط على الزر أدناه لشراء مزاد جديد.').setColor('#2f3136');
-                        const reRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('buy_auction').setLabel('🛒 شراء مزاد جديد').setStyle(ButtonStyle.Success));
-                        await targetRoom.send({ embeds: [reEmbed], components: [reRow] });
 
                          client.login(process.env.DISCORD_TOKEN);
